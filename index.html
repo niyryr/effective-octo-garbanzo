@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
   <title>Hand-Control Neon Particles</title>
 
-  <!-- MediaPipe Tasks Vision (官方推荐 CDN 引入方式) -->
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/vision_bundle.js" crossorigin="anonymous"></script>
+  <!-- 关键：把 cdn.jsdelivr.net 换成更稳的节点（gcore / fastly） -->
+  <script src="https://gcore.jsdelivr.net/npm/@mediapipe/tasks-vision/vision_bundle.js" crossorigin="anonymous"></script>
 
   <style>
     html, body { margin:0; height:100%; overflow:hidden; background:#000; font-family: system-ui, -apple-system, Segoe UI, Roboto, "PingFang SC", "Noto Sans CJK SC", Arial; }
@@ -14,66 +14,28 @@
     video { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; transform: scaleX(-1); filter: contrast(1.05) saturate(1.05); }
     canvas { position:absolute; inset:0; width:100%; height:100%; }
 
-    /* 赛博扫描线 + 暗角 */
     .fx::before{
-      content:"";
-      position:absolute; inset:0;
-      background: repeating-linear-gradient(
-        to bottom,
-        rgba(255,255,255,0.035) 0px,
-        rgba(255,255,255,0.035) 1px,
-        rgba(0,0,0,0) 3px,
-        rgba(0,0,0,0) 6px
-      );
-      mix-blend-mode: overlay;
-      pointer-events:none;
-      opacity:.35;
+      content:""; position:absolute; inset:0;
+      background: repeating-linear-gradient(to bottom, rgba(255,255,255,0.035) 0px, rgba(255,255,255,0.035) 1px, rgba(0,0,0,0) 3px, rgba(0,0,0,0) 6px);
+      mix-blend-mode: overlay; pointer-events:none; opacity:.35;
     }
     .fx::after{
-      content:"";
-      position:absolute; inset:-20%;
+      content:""; position:absolute; inset:-20%;
       background: radial-gradient(ellipse at center, rgba(0,0,0,0) 0%, rgba(0,0,0,0.5) 55%, rgba(0,0,0,0.9) 100%);
-      pointer-events:none;
-      opacity:.9;
+      pointer-events:none; opacity:.9;
     }
 
-    #hud {
-      position:absolute; left:12px; top:12px; right:12px;
-      display:flex; gap:10px; align-items:center; justify-content:space-between;
-      color:rgba(180, 230, 255, .9);
-      text-shadow: 0 0 12px rgba(80,180,255,.65);
-      pointer-events:none;
-      font-size:12px;
-      letter-spacing:.5px;
-    }
+    #hud { position:absolute; left:12px; top:12px; right:12px; display:flex; gap:10px; align-items:center; justify-content:space-between;
+      color:rgba(180, 230, 255, .9); text-shadow: 0 0 12px rgba(80,180,255,.65); pointer-events:none; font-size:12px; letter-spacing:.5px; }
     #badge { display:flex; gap:10px; align-items:center; }
     #dot { width:8px; height:8px; border-radius:50%; background:#00e5ff; box-shadow: 0 0 14px rgba(0,229,255,.9); }
     #tip { opacity:.9; }
 
-    #panel {
-      position:absolute; left:12px; bottom:12px; right:12px;
-      display:flex; gap:10px; align-items:center; justify-content:space-between;
-      pointer-events:auto;
-    }
-    #btn {
-      appearance:none; border:1px solid rgba(80,180,255,.6);
-      background: rgba(0,0,0,.35);
-      color: rgba(200,240,255,.95);
-      padding:12px 14px;
-      border-radius:14px;
-      font-size:14px;
-      backdrop-filter: blur(8px);
-      box-shadow: 0 0 18px rgba(0,229,255,.18);
-    }
+    #panel { position:absolute; left:12px; bottom:12px; right:12px; display:flex; gap:10px; align-items:center; justify-content:space-between; pointer-events:auto; }
+    #btn { appearance:none; border:1px solid rgba(80,180,255,.6); background: rgba(0,0,0,.35); color: rgba(200,240,255,.95);
+      padding:12px 14px; border-radius:14px; font-size:14px; backdrop-filter: blur(8px); box-shadow: 0 0 18px rgba(0,229,255,.18); }
     #btn:active { transform: translateY(1px); }
-    #status {
-      color: rgba(200,240,255,.85);
-      font-size:12px;
-      opacity:.95;
-      text-shadow: 0 0 12px rgba(80,180,255,.45);
-      max-width: 62%;
-      line-height: 1.3;
-    }
+    #status { color: rgba(200,240,255,.88); font-size:12px; opacity:.98; text-shadow: 0 0 12px rgba(80,180,255,.45); max-width: 68%; line-height: 1.35; white-space: pre-wrap; }
   </style>
 </head>
 
@@ -94,14 +56,23 @@
 </div>
 
 <script type="module">
-  import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js";
+  // 如果你 gcore 也打不开，把这一行改成：
+  // const JSDELIVR = "https://fastly.jsdelivr.net";
+  const JSDELIVR = "https://gcore.jsdelivr.net";
+
+  // 固定版本更稳（避免 “latest” 某些版本缺文件的问题）
+  const MP_VER = "0.10.22-rc.20250304";
+
+  import * as THREE from `${JSDELIVR}/npm/three@0.160.0/build/three.module.js`;
 
   const video = document.getElementById("video");
   const canvas = document.getElementById("c");
   const btn = document.getElementById("btn");
   const statusEl = document.getElementById("status");
 
-  // ===== 1) Three.js 粒子场 =====
+  function setStatus(t){ statusEl.textContent = t; }
+
+  // ===== 1) Three.js 粒子 =====
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
   renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
   renderer.setSize(innerWidth, innerHeight);
@@ -110,14 +81,12 @@
   const camera = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 0.01, 100);
   camera.position.set(0, 0, 3.2);
 
-  // 自适应粒子数：手机别太大
   const isLow = (navigator.hardwareConcurrency || 4) <= 4;
   const N = isLow ? 12000 : 22000;
 
   const positions = new Float32Array(N * 3);
   const vel = new Float32Array(N * 3);
   const seed = new Float32Array(N);
-
   const bounds = 1.35;
 
   for (let i = 0; i < N; i++) {
@@ -140,8 +109,8 @@
   const uniforms = {
     uTime: { value: 0 },
     uPointer: { value: new THREE.Vector3(0, 0, 0) },
-    uStrength: { value: 0 },   // 0~1
-    uMode: { value: 0 },       // -1 repel, +1 attract
+    uStrength: { value: 0 },
+    uMode: { value: 0 },
     uGlow: { value: 1.0 },
   };
 
@@ -156,25 +125,16 @@
       attribute float aSeed;
       varying float vGlow;
       varying vec3 vCol;
-
       void main(){
         vec3 p = position;
-
-        // 轻微呼吸抖动，增强“未来感”
-        float wob = sin(uTime * 0.9 + aSeed) * 0.015
-                  + sin(uTime * 1.7 + aSeed * 2.0) * 0.01;
+        float wob = sin(uTime * 0.9 + aSeed) * 0.015 + sin(uTime * 1.7 + aSeed * 2.0) * 0.01;
         p.xy += wob;
-
         vec4 mv = modelViewMatrix * vec4(p, 1.0);
         gl_Position = projectionMatrix * mv;
-
         float size = 2.2 + 3.5 * uStrength;
         gl_PointSize = size * (320.0 / -mv.z);
-
-        // 霓虹配色（时间变色）
         vec3 base = 0.55 + 0.45 * cos(uTime + vec3(0.0, 2.1, 4.2) + aSeed);
         vCol = base;
-
         vGlow = 0.65 + 0.35 * sin(uTime * 2.0 + aSeed);
       }
     `,
@@ -183,24 +143,15 @@
       uniform float uGlow;
       varying float vGlow;
       varying vec3 vCol;
-
       void main(){
         vec2 uv = gl_PointCoord.xy - 0.5;
         float r = length(uv);
-
-        // 软核 + 外圈
         float core = smoothstep(0.35, 0.0, r);
         float ring = smoothstep(0.50, 0.35, r) * 0.6;
-
         float a = (core + ring) * (0.65 + 0.35 * vGlow) * uGlow;
         vec3 col = vCol;
-
-        // 边缘偏蓝一点（更赛博）
         col.b += (1.0 - smoothstep(0.0, 0.5, r)) * 0.25;
-
         gl_FragColor = vec4(col, a);
-
-        // 圆点以外透明
         if (r > 0.5) discard;
       }
     `,
@@ -215,52 +166,36 @@
     camera.updateProjectionMatrix();
   });
 
-  // ===== 2) 手势 -> 控制参数（指尖、捏合、张开） =====
+  // ===== 2) 手势 =====
   let handLandmarker = null;
   let running = false;
 
-  // pointer（世界坐标，z=0 平面）
   const pointer = new THREE.Vector3(0, 0, 0);
   let targetStrength = 0;
-  let targetMode = 0; // -1 repel, +1 attract, 0 idle
-
-  function setStatus(t) { statusEl.textContent = t; }
+  let targetMode = 0;
 
   function normToWorld(nx, ny) {
-    // nx,ny: 0..1 (MediaPipe 归一化)
-    // 先镜像（因为 video 做了 scaleX(-1)）
-    nx = 1.0 - nx;
+    nx = 1.0 - nx; // 镜像修正
     const x = (nx * 2 - 1) * 1.55;
     const y = (-(ny * 2 - 1)) * 1.05;
     return new THREE.Vector3(x, y, 0);
   }
-
   function clamp01(v){ return Math.max(0, Math.min(1, v)); }
 
   function updateFromHands(res) {
-    // res.landmarks: [ [ {x,y,z}*21 ], ... ]
     if (!res || !res.landmarks || res.landmarks.length === 0) {
-      targetStrength = 0;
-      targetMode = 0;
-      return;
+      targetStrength = 0; targetMode = 0; return;
     }
-
-    const L = res.landmarks[0]; // 先用第一只手
+    const L = res.landmarks[0];
     const indexTip = L[8];
     const thumbTip = L[4];
 
-    // 指针 = 食指指尖
-    const p = normToWorld(indexTip.x, indexTip.y);
-    pointer.lerp(p, 0.35); // 平滑一下
+    pointer.lerp(normToWorld(indexTip.x, indexTip.y), 0.35);
 
-    // 捏合程度：拇指尖到食指尖的距离
     const dx = (thumbTip.x - indexTip.x);
     const dy = (thumbTip.y - indexTip.y);
     const pinchDist = Math.sqrt(dx*dx + dy*dy);
 
-    // 经验阈值（不同手机略有差别）
-    // pinchDist 小 = 捏合 = 吸入聚拢
-    // pinchDist 大 = 张开 = 推开扩散
     if (pinchDist < 0.045) {
       targetMode = +1;
       targetStrength = 1.0 - clamp01((pinchDist - 0.02) / 0.025);
@@ -273,7 +208,6 @@
     }
   }
 
-  // ===== 3) 粒子动力学（吸/推 + 漩涡 + 轻噪声） =====
   const tmp = new THREE.Vector3();
   const toP = new THREE.Vector3();
 
@@ -281,11 +215,10 @@
     const s = uniforms.uStrength.value;
     const mode = uniforms.uMode.value;
 
-    // 影响半径：强度越大半径越大
     const radius = 0.22 + s * 0.55;
     const rad2 = radius * radius;
 
-    const swirl = 0.55 + s * 1.6;     // 漩涡强一点更“未来”
+    const swirl = 0.55 + s * 1.6;
     const pull = (mode === 0 ? 0.0 : (mode * (0.012 + s * 0.03)));
     const damp = 0.985 - s * 0.01;
 
@@ -295,7 +228,6 @@
       const py = positions[i3 + 1];
       const pz = positions[i3 + 2];
 
-      // 向指针的向量
       toP.set(pointer.x - px, pointer.y - py, -pz * 0.15);
       const d2 = toP.x*toP.x + toP.y*toP.y + toP.z*toP.z;
 
@@ -303,11 +235,8 @@
         const d = Math.sqrt(d2) + 1e-6;
         const inv = 1.0 - (d / radius);
 
-        // 吸/推
         tmp.copy(toP).multiplyScalar((pull * inv) / d);
 
-        // 漩涡（绕着指针旋转）
-        // (x,y) 旋转 90°
         const sx = -toP.y;
         const sy =  toP.x;
         tmp.x += sx * swirl * inv * 0.0028;
@@ -318,22 +247,18 @@
         vel[i3 + 2] += tmp.z;
       }
 
-      // 轻噪声漂移
       const t = uniforms.uTime.value;
       vel[i3 + 0] += Math.sin(t * 0.7 + seed[i]) * 0.00002;
       vel[i3 + 1] += Math.cos(t * 0.9 + seed[i] * 1.3) * 0.00002;
 
-      // 阻尼
       vel[i3 + 0] *= damp;
       vel[i3 + 1] *= damp;
       vel[i3 + 2] *= damp;
 
-      // 移动
       positions[i3 + 0] = px + vel[i3 + 0] * (dt * 60);
       positions[i3 + 1] = py + vel[i3 + 1] * (dt * 60);
       positions[i3 + 2] = pz + vel[i3 + 2] * (dt * 60);
 
-      // 边界回弹/循环
       if (positions[i3 + 0] >  bounds) positions[i3 + 0] = -bounds;
       if (positions[i3 + 0] < -bounds) positions[i3 + 0] =  bounds;
       if (positions[i3 + 1] >  bounds) positions[i3 + 1] = -bounds;
@@ -341,11 +266,9 @@
       if (positions[i3 + 2] >  0.8)    positions[i3 + 2] = -0.8;
       if (positions[i3 + 2] < -0.8)    positions[i3 + 2] =  0.8;
     }
-
     geo.attributes.position.needsUpdate = true;
   }
 
-  // ===== 4) 主循环 =====
   let lastT = performance.now();
   let lastVideoTime = -1;
 
@@ -356,14 +279,12 @@
     lastT = now;
     uniforms.uTime.value = now / 1000;
 
-    // 每个“新视频帧”才跑一次检测（省性能）
     if (handLandmarker && video.readyState >= 2 && video.currentTime !== lastVideoTime) {
       const res = handLandmarker.detectForVideo(video, now);
       updateFromHands(res);
       lastVideoTime = video.currentTime;
     }
 
-    // 平滑过渡
     uniforms.uPointer.value.lerp(pointer, 0.35);
     uniforms.uStrength.value += (targetStrength - uniforms.uStrength.value) * 0.12;
     uniforms.uMode.value += (targetMode - uniforms.uMode.value) * 0.18;
@@ -374,52 +295,63 @@
     requestAnimationFrame(loop);
   }
 
-  // ===== 5) 启动：摄像头 + HandLandmarker =====
   async function waitForMP() {
-    const deadline = performance.now() + 6000;
+    const deadline = performance.now() + 8000;
     while (performance.now() < deadline) {
       if (window.FilesetResolver && window.HandLandmarker) return;
       await new Promise(r => setTimeout(r, 50));
     }
-    throw new Error("MediaPipe 没加载成功（vision_bundle.js）");
+    throw new Error("MediaPipe 引擎未加载（可能是 JSDELIVR 被拦）。");
+  }
+
+  async function tryCreateLandmarker(vision) {
+    // 先试官方（可能被拦）
+    const modelCandidates = [
+      "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/latest/hand_landmarker.task",
+      // 备用：从 GitHub 项目里拿到同名 task 文件，经由 jsDelivr 节点分发
+      `${JSDELIVR}/gh/heyfoz/nodejs-mediapipe@main/models/hand_landmarker.task`,
+    ];
+
+    let lastErr = null;
+    for (const url of modelCandidates) {
+      try {
+        setStatus("正在加载手势模型…\n" + url);
+        const lm = await window.HandLandmarker.createFromOptions(vision, {
+          baseOptions: { modelAssetPath: url },
+          numHands: 2
+        });
+        return lm;
+      } catch (e) {
+        lastErr = e;
+      }
+    }
+    throw lastErr || new Error("模型加载失败（未知原因）");
   }
 
   async function start() {
     btn.disabled = true;
-    setStatus("正在请求摄像头权限…（请点“允许”）");
 
-    // 1) 摄像头
+    setStatus("1/3 请求摄像头权限…（点允许）");
     const stream = await navigator.mediaDevices.getUserMedia({
-      video: {
-        facingMode: "user", // 想用后置改成 "environment"
-        width: { ideal: 1280 },
-        height: { ideal: 720 }
-      },
+      video: { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 720 } },
       audio: false
     });
     video.srcObject = stream;
     await video.play();
 
-    // 2) HandLandmarker
-    setStatus("正在加载手势模型…第一次会慢一点");
+    setStatus("2/3 加载 MediaPipe 引擎…");
     await waitForMP();
 
+    setStatus("3/3 加载 WASM 文件…");
     const vision = await window.FilesetResolver.forVisionTasks(
-      "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm"
+      `${JSDELIVR}/npm/@mediapipe/tasks-vision@${MP_VER}/wasm`
     );
 
-    handLandmarker = await window.HandLandmarker.createFromOptions(vision, {
-      baseOptions: {
-        // 官方 HandLandmarker(full) 最新模型（直接用远程地址）
-        modelAssetPath: "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/latest/hand_landmarker.task"
-      },
-      numHands: 2
-    });
-
+    handLandmarker = await tryCreateLandmarker(vision);
     await handLandmarker.setOptions({ runningMode: "video" });
 
     running = true;
-    setStatus("已启动 ✅ 伸出食指控制；捏合=聚拢；张开=扩散");
+    setStatus("已启动 ✅\n食指=移动；捏合=聚拢；张开=扩散");
     requestAnimationFrame(loop);
   }
 
@@ -427,19 +359,10 @@
     try { await start(); }
     catch (e) {
       console.error(e);
-      setStatus("启动失败：请确认已允许摄像头；并用 GitHub Pages 的 https 链接打开。");
+      const msg = (e && (e.message || e.toString())) ? (e.message || e.toString()) : "未知错误";
+      setStatus("启动失败 ❌\n" + msg + "\n\n解决：把 JSDELIVR 改成 fastly.jsdelivr.net 试试；或换网络/WiFi。");
       btn.disabled = false;
     }
-  });
-
-  // 备用：没开手势时也能摸屏玩
-  addEventListener("pointermove", (e) => {
-    if (running) return;
-    const nx = e.clientX / innerWidth;
-    const ny = e.clientY / innerHeight;
-    pointer.lerp(normToWorld(nx, ny), 0.35);
-    targetStrength = 0.8;
-    targetMode = (e.buttons ? +1 : 0);
   });
 </script>
 </body>
